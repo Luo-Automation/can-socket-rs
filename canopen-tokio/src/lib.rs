@@ -7,6 +7,8 @@ use can_socket::tokio::CanSocket;
 use can_socket::{CanFrame, CanBaseId};
 use std::num::NonZeroU8;
 use std::time::{Duration, Instant};
+use tokio::{task, sync::mpsc};
+use futures::future;
 
 mod id;
 mod sync;
@@ -15,6 +17,83 @@ pub use id::CanBaseIdExt;
 pub mod nmt;
 pub mod pdo;
 pub mod sdo;
+
+
+struct Router {
+    sender: mpsc::Sender<CanFrame>,
+}
+
+impl Router {
+    // Constructor function to create a new Router instance
+    fn new(sender: mpsc::Sender<CanFrame>) -> Router {
+        Router { sender }
+    }
+
+    // Method to execute the subroutine with the given input
+    async fn can_listener(&mut self, can_socket: CanSocket) -> Result<(), ()> {
+
+
+		loop {
+			let frame = can_socket.recv().await.unwrap();
+			_ = self.sender.send(frame).await;
+		}
+
+    }
+}
+
+fn extract_cob_id(canopen_id: u32) -> u32 {
+    canopen_id & !0x7F
+}
+
+fn extract_node_id(canopen_id: u32) -> u8 {
+    (canopen_id & 0x7F) as u8
+}
+
+async fn frame_router(mut receiver: mpsc::Receiver<CanFrame>) -> Result<(), ()>{
+
+    while let Some(frame) = receiver.recv().await {
+
+		println!("Subroutine received input: {:?}", frame);
+
+		let id = frame.id();
+		let node_id = extract_node_id(id.as_u32());
+
+		if extract_cob_id(id.as_u32()) == 0x080 {
+			println!("Received EMCY frame from node: {}", node_id);
+		}
+		
+    }
+	Ok(())
+}
+
+
+/// A CANopen handle.
+/// 
+/// A handle CANopen handle for [`CanSocket`], routing CANopen messages.
+#[derive(Debug)]
+pub struct CanOpenHandle {
+}
+
+impl CanOpenHandle {
+	/// Create CANopen handle.
+	pub async fn new(can_socket: CanSocket) {
+
+		let (sender, receiver) = mpsc::channel::<CanFrame>(100);
+
+		let mut futures = Vec::new();
+
+		let canopen_receiver = task::spawn(async move {frame_router(receiver).await});
+		futures.push(canopen_receiver);
+
+		let mut router = Router::new(sender);
+
+    	let canopen_sender = task::spawn(async move {router.can_listener(can_socket).await});
+		futures.push(canopen_sender);
+
+		future::join_all(futures).await;
+
+	}
+}
 
 /// A CANopen socket.
 ///
@@ -244,12 +323,10 @@ impl CanOpenSocket {
 
 	/// Receive a new message from the CAN bus that that matches the given function code and node ID.
 	///
-	/// RTR (request-to-read) messages are filtered out (not returned).
-	///
 	/// Messages already in the read queue are not returned.
 	/// If a message does not match the filter, it is added to the read queue.
 	async fn recv_new_by_can_id(&mut self, can_id: CanBaseId, timeout: Duration) -> std::io::Result<Option<CanFrame>> {
-		self.recv_new_filtered(|frame| !frame.is_rtr() && frame.id().to_base().ok() == Some(can_id), timeout).await
+		self.recv_new_filtered(|frame| frame.id().to_base().ok() == Some(can_id), timeout).await
 	}
 }
 
