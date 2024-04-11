@@ -7,8 +7,7 @@ use can_socket::tokio::CanSocket;
 use can_socket::{CanFrame, CanBaseId};
 use std::num::NonZeroU8;
 use std::time::{Duration, Instant};
-use tokio::{task, sync::mpsc};
-use futures::future;
+use tokio::sync::mpsc;
 
 mod id;
 mod sync;
@@ -18,81 +17,92 @@ pub mod nmt;
 pub mod pdo;
 pub mod sdo;
 
-
-struct Router {
-    sender: mpsc::Sender<CanFrame>,
+#[derive(Debug)]
+enum FrameType {
+	UNDEFINED,
+	NMT,
+	SYNC,
+	EMCY,
+	TPDO,
+	RPDO,
+	SDO,
+	HEARTBEAT,
 }
 
-impl Router {
-    // Constructor function to create a new Router instance
-    fn new(sender: mpsc::Sender<CanFrame>) -> Router {
-        Router { sender }
-    }
-
-    // Method to execute the subroutine with the given input
-    async fn can_listener(&mut self, can_socket: CanSocket) -> Result<(), ()> {
-
-
-		loop {
-			let frame = can_socket.recv().await.unwrap();
-			_ = self.sender.send(frame).await;
-		}
-
-    }
+fn frametype(id: u32) -> FrameType {
+    let cob_id = id & !0x7F;
+	let node_id = node_id(id);
+	match (cob_id, node_id) {
+		(0x0, 0) => FrameType::NMT,
+		(0x80, 0) => FrameType::SYNC,
+		(0x80, _) => FrameType::EMCY,
+		(0x180 | 0x280 | 0x380 | 0x480, _) => FrameType::TPDO,
+		(0x200 | 0x300 | 0x400 | 0x500, _) => FrameType::RPDO,
+		(0x580 | 0x600, _) => FrameType::SDO,
+		(0x700, _) => FrameType::HEARTBEAT,
+		_ => FrameType::UNDEFINED,
+	}
 }
 
-fn extract_cob_id(canopen_id: u32) -> u32 {
-    canopen_id & !0x7F
-}
-
-fn extract_node_id(canopen_id: u32) -> u8 {
-    (canopen_id & 0x7F) as u8
-}
-
-async fn frame_router(mut receiver: mpsc::Receiver<CanFrame>) -> Result<(), ()>{
-
-    while let Some(frame) = receiver.recv().await {
-
-		println!("Subroutine received input: {:?}", frame);
-
-		let id = frame.id();
-		let node_id = extract_node_id(id.as_u32());
-
-		if extract_cob_id(id.as_u32()) == 0x080 {
-			println!("Received EMCY frame from node: {}", node_id);
-		}
-		
-    }
-	Ok(())
+fn node_id(id: u32) -> u8 {
+    (id & 0x7F) as u8
 }
 
 
 /// A CANopen handle.
 /// 
 /// A handle CANopen handle for [`CanSocket`], routing CANopen messages.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CanOpenHandle {
 }
 
 impl CanOpenHandle {
+
 	/// Create CANopen handle.
-	pub async fn new(can_socket: CanSocket) {
+	pub async fn new() -> Result<Self, ()> {
 
-		let (sender, receiver) = mpsc::channel::<CanFrame>(100);
+		let handle = Self {
+		};
 
-		let mut futures = Vec::new();
-
-		let canopen_receiver = task::spawn(async move {frame_router(receiver).await});
-		futures.push(canopen_receiver);
-
-		let mut router = Router::new(sender);
-
-    	let canopen_sender = task::spawn(async move {router.can_listener(can_socket).await});
-		futures.push(canopen_sender);
-
-		future::join_all(futures).await;
-
+		Ok(handle)
 	}
+
+	/// Start listener
+	pub async fn listener(&mut self, interface: &str, tx: mpsc::Sender<CanFrame>) -> Result<(), ()> {
+
+		let socket = CanSocket::bind(&interface)
+			.map_err(|e| eprintln!("Failed to create CAN socket for interface {}: {e}", &interface))?;
+
+		loop  {
+			let frame = socket.recv().await.unwrap();
+	
+			let id = frame.id();
+			let node_id = node_id(id.as_u32());
+	
+			match frametype(id.as_u32()) {
+				FrameType::NMT => {
+					tx.send(frame).await.ok();
+				}
+				FrameType::SYNC => {}
+				FrameType::EMCY => {
+					println!("Received EMCY frame from node: {}, data {:?}", node_id, frame.data());
+				}
+				FrameType::HEARTBEAT => {
+					tx.send(frame).await.ok();
+				}
+				FrameType::TPDO => {
+					tx.send(frame).await.ok();
+				}
+				FrameType::RPDO => {
+					tx.send(frame).await.ok();
+				}
+				FrameType::SDO => {
+					tx.send(frame).await.ok();
+				}
+				_ => log::warn!("Received unsupported frame type")
+			}
+		}
+    }
 }
 
 /// A CANopen socket.
@@ -143,6 +153,14 @@ impl CanOpenSocket {
 		frame: &CanFrame,
 	) -> std::io::Result<()> {
 		self.socket.send(frame).await
+	}
+
+	/// Broadcast an NMT command.
+	pub async fn broadcast_nmt_command(
+		&mut self,
+		command: nmt::NmtCommand,
+	) -> Result<(), nmt::NmtError> {
+		nmt::broadcast_nmt_command(self, command).await
 	}
 
 	/// Send an NMT command and wait for the device to go into the specified state.
