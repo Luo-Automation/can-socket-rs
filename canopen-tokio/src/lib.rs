@@ -220,7 +220,7 @@ impl CanOpenSocket {
 
 	/// Get the full PDO configuration of an RPDO of a remote node.
 	pub async fn read_rpdo_configuration(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
@@ -232,7 +232,7 @@ impl CanOpenSocket {
 
 	/// Get the full configuration of a TPDO of a remote node.
 	pub async fn read_tpdo_configuration(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
@@ -257,7 +257,7 @@ impl CanOpenSocket {
 
 	/// Configure a TPDO of a remote node.
 	pub async fn configure_tpdo(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
@@ -270,7 +270,7 @@ impl CanOpenSocket {
 
 	/// Enable or disable an RPDO of a remote node.
 	pub async fn enable_rpdo(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
@@ -283,7 +283,7 @@ impl CanOpenSocket {
 
 	/// Enable or disable a TPDO of a remote node.
 	pub async fn enable_tpdo(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
@@ -296,7 +296,7 @@ impl CanOpenSocket {
 
 	/// Send a SYNC command to the CAN network.
 	pub async fn send_sync(
-		&mut self,
+		&self,
 		counter: Option<NonZeroU8>,
 	) -> Result<(), std::io::Error> {
 		sync::send_sync(self, counter).await

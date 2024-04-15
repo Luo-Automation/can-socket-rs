@@ -18,7 +18,7 @@ use super::{
 
 /// Read the configuration of an RPDO.
 pub(crate) async fn read_rpdo_configuration(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	pdo: u16,
@@ -36,7 +36,7 @@ pub(crate) async fn read_rpdo_configuration(
 
 /// Read the configuration of a TPDO.
 pub(crate) async fn read_tpdo_configuration(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	pdo: u16,
@@ -54,7 +54,7 @@ pub(crate) async fn read_tpdo_configuration(
 
 /// Read the communication parameters of an RPDO.
 pub(crate) async fn read_rpdo_communication_parameters(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	pdo: u16,
@@ -91,7 +91,7 @@ pub(crate) async fn read_rpdo_communication_parameters(
 
 /// Read the communication parameters of a TPDO.
 pub(crate) async fn read_tpdo_communication_parameters(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	pdo: u16,
@@ -136,7 +136,7 @@ pub(crate) async fn read_tpdo_communication_parameters(
 
 /// Read the mapping of a PDO object (RPDO or TPDO).
 pub(crate) async fn read_pdo_mapping(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	object_index: u16,

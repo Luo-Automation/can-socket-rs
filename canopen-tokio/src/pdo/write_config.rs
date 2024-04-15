@@ -80,7 +80,7 @@ pub(crate) async fn configure_rpdo(
 
 /// Read the configuration of a TPDO.
 pub(crate) async fn configure_tpdo(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	pdo: u16,
@@ -138,7 +138,7 @@ pub(crate) async fn write_rpdo_communication_parameters(
 
 /// Read the communication parameters of a TPDO.
 pub(crate) async fn write_tpdo_communication_parameters(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	pdo: u16,
