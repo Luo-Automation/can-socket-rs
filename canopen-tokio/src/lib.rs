@@ -29,7 +29,7 @@ enum FrameType {
 	HEARTBEAT,
 }
 
-fn frametype(id: u32) -> FrameType {
+async fn frametype(id: u32) -> FrameType {
     let cob_id = id & !0x7F;
 	let node_id = node_id(id);
 	match (cob_id, node_id) {
@@ -48,61 +48,41 @@ fn node_id(id: u32) -> u8 {
     (id & 0x7F) as u8
 }
 
+/// Start canopen listener
+pub async fn listener(interface: &str, tx: mpsc::Sender<CanFrame>) -> Result<(), ()> {
 
-/// A CANopen handle.
-/// 
-/// A handle CANopen handle for [`CanSocket`], routing CANopen messages.
-#[derive(Debug, Clone)]
-pub struct CanOpenHandle {
-}
+	let socket = CanSocket::bind(&interface)
+		.map_err(|e| eprintln!("Failed to create CAN socket for interface {}: {e}", &interface))?;
 
-impl CanOpenHandle {
+	loop  {
+		let frame = socket.recv().await.unwrap();
 
-	/// Create CANopen handle.
-	pub async fn new() -> Result<Self, ()> {
+		let id = frame.id();
+		let node_id = node_id(id.as_u32());
 
-		let handle = Self {
-		};
-
-		Ok(handle)
-	}
-
-	/// Start listener
-	pub async fn listener(&mut self, interface: &str, tx: mpsc::Sender<CanFrame>) -> Result<(), ()> {
-
-		let socket = CanSocket::bind(&interface)
-			.map_err(|e| eprintln!("Failed to create CAN socket for interface {}: {e}", &interface))?;
-
-		loop  {
-			let frame = socket.recv().await.unwrap();
-	
-			let id = frame.id();
-			let node_id = node_id(id.as_u32());
-	
-			match frametype(id.as_u32()) {
-				FrameType::NMT => {
-					tx.send(frame).await.ok();
-				}
-				FrameType::SYNC => {}
-				FrameType::EMCY => {
-					println!("Received EMCY frame from node: {}, data {:?}", node_id, frame.data());
-				}
-				FrameType::HEARTBEAT => {
-					tx.send(frame).await.ok();
-				}
-				FrameType::TPDO => {
-					tx.send(frame).await.ok();
-				}
-				FrameType::RPDO => {
-					tx.send(frame).await.ok();
-				}
-				FrameType::SDO => {
-					tx.send(frame).await.ok();
-				}
-				_ => log::warn!("Received unsupported frame type")
+		match frametype(id.as_u32()).await {
+			FrameType::NMT => {
+				tx.send(frame).await.ok();
 			}
+			FrameType::SYNC => {}
+			FrameType::EMCY => {
+				println!("Received EMCY frame from node: {}, data {:?}", node_id, frame.data());
+			}
+			FrameType::HEARTBEAT => {
+				tx.send(frame).await.ok();
+			}
+			FrameType::TPDO => {
+				tx.send(frame).await.ok();
+			}
+			FrameType::RPDO => {
+				tx.send(frame).await.ok();
+			}
+			FrameType::SDO => {
+				tx.send(frame).await.ok();
+			}
+			_ => log::warn!("Received unsupported frame type")
 		}
-    }
+	}
 }
 
 /// A CANopen socket.
