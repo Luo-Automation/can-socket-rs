@@ -191,7 +191,7 @@ fn check_server_command(frame: &CanFrame, expected: ServerCommand) -> Result<(),
 
 /// Send an abort command to an SDO server.
 async fn send_abort_transfer_command(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	address: SdoAddress,
 	node_id: u8,
 	object: ObjectIndex,

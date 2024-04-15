@@ -61,7 +61,7 @@ async fn main() {
 async fn do_main(options: Options) -> Result<(), ()> {
 	let socket = CanSocket::bind(&options.interface)
 		.map_err(|e| log::error!("Failed to create CAN socket for interface {}: {e}", options.interface))?;
-	let mut socket = CanOpenSocket::new(socket);
+	let socket = CanOpenSocket::new(socket);
 
 	let object = ObjectIndex::new(options.index, options.subindex);
 	let data: Vec<u8> = socket.sdo_upload(options.node_id, SdoAddress::standard(), object, options.timeout).await

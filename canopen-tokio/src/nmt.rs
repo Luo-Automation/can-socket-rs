@@ -97,7 +97,7 @@ pub struct UnexpectedState {
 }
 
 /// Broadcast an NMT command.
-pub async fn broadcast_nmt_command(bus: &mut CanOpenSocket, command: NmtCommand) -> Result<(), NmtError> {
+pub async fn broadcast_nmt_command(bus: &CanOpenSocket, command: NmtCommand) -> Result<(), NmtError> {
 	log::debug!("Broadcasting NMT command {command:?}");
 	let command_frame = CanFrame::new(
 		NMT_COB_ID,
@@ -111,7 +111,7 @@ pub async fn broadcast_nmt_command(bus: &mut CanOpenSocket, command: NmtCommand)
 }
 
 /// Send an NMT command and wait for the device to go into the specified state.
-pub async fn send_nmt_command(bus: &mut CanOpenSocket, node_id: u8, command: NmtCommand, timeout: Duration) -> Result<(), NmtError> {
+pub async fn send_nmt_command(bus: &CanOpenSocket, node_id: u8, command: NmtCommand, timeout: Duration) -> Result<(), NmtError> {
 	log::debug!("Sending NMT command {command:?} to node 0x{node_id:02X} (timeout {timeout:?})");
 	let command_frame = CanFrame::new(
 		NMT_COB_ID,

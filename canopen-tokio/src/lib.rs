@@ -85,6 +85,20 @@ pub async fn listener(interface: &str, tx: mpsc::Sender<CanFrame>) -> Result<(),
 	}
 }
 
+/// Receive a raw CAN frame with a deadline.
+///
+/// Returns [`None`] if the deadline expires before a frame arrives.
+/// Returns `Some(Err(...))` if the underlying CAN socket gives an error.
+pub async fn recv_frame_deadline(
+    mut rx: mpsc::Receiver<CanFrame>,
+    deadline: Instant,
+) -> Option<Option<can_socket::CanFrame>> {
+    if Instant::now() >= deadline {
+        return None;
+    }
+    tokio::time::timeout_at(deadline.into(), rx.recv()).await.ok()
+}
+
 /// A CANopen socket.
 ///
 /// Wrapper around a [`CanSocket`] that implements the `CANopen` protocol.
@@ -118,7 +132,7 @@ impl CanOpenSocket {
 	/// Returns [`None`] if the deadline expires before a frame arrives.
 	/// Returns `Some(Err(...))` if the underlying CAN socket gives an error.
 	pub async fn recv_frame_deadline(
-		&mut self,
+		&self,
 		deadline: Instant,
 	) -> Option<std::io::Result<can_socket::CanFrame>> {
 		if Instant::now() >= deadline {
@@ -129,7 +143,7 @@ impl CanOpenSocket {
 
 	/// Send a raw CAN frame.
 	pub async fn send_frame(
-		&mut self,
+		&self,
 		frame: &CanFrame,
 	) -> std::io::Result<()> {
 		self.socket.send(frame).await
@@ -137,7 +151,7 @@ impl CanOpenSocket {
 
 	/// Broadcast an NMT command.
 	pub async fn broadcast_nmt_command(
-		&mut self,
+		&self,
 		command: nmt::NmtCommand,
 	) -> Result<(), nmt::NmtError> {
 		nmt::broadcast_nmt_command(self, command).await
@@ -145,7 +159,7 @@ impl CanOpenSocket {
 
 	/// Send an NMT command and wait for the device to go into the specified state.
 	pub async fn send_nmt_command(
-		&mut self,
+		&self,
 		node_id: u8,
 		command: nmt::NmtCommand,
 		timeout: Duration,
@@ -158,7 +172,7 @@ impl CanOpenSocket {
 	/// Note that upload means "upload to server".
 	/// Most people outside of [CiA](https://can-cia.org/) would call this a download.
 	pub async fn sdo_upload_raw(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		object: ObjectIndex,
@@ -174,7 +188,7 @@ impl CanOpenSocket {
 	/// Note that upload means "upload to server".
 	/// Most people outside of [CiA](https://can-cia.org/) would call this a download.
 	pub async fn sdo_upload<T: sdo::UploadObject>(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		object: ObjectIndex,
@@ -192,7 +206,7 @@ impl CanOpenSocket {
 	/// Note that download means "download to server".
 	/// Most people outside of [CiA](https://can-cia.org/) would call this an upload.
 	pub async fn sdo_download<T: sdo::DownloadObject>(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		object: ObjectIndex,
@@ -293,7 +307,7 @@ impl CanOpenSocket {
 	/// Messages already in the read queue are not returned.
 	/// If a message does not match the filter, it is added to the read queue.
 	async fn recv_new_filtered<F>(
-		&mut self,
+		&self,
 		predicate: F,
 		timeout: Duration,
 	) -> std::io::Result<Option<CanFrame>>
@@ -323,7 +337,7 @@ impl CanOpenSocket {
 	///
 	/// Messages already in the read queue are not returned.
 	/// If a message does not match the filter, it is added to the read queue.
-	async fn recv_new_by_can_id(&mut self, can_id: CanBaseId, timeout: Duration) -> std::io::Result<Option<CanFrame>> {
+	async fn recv_new_by_can_id(&self, can_id: CanBaseId, timeout: Duration) -> std::io::Result<Option<CanFrame>> {
 		self.recv_new_filtered(|frame| frame.id().to_base().ok() == Some(can_id), timeout).await
 	}
 }
