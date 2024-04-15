@@ -16,7 +16,7 @@ use super::{
 
 /// Enable or disable an RPDO.
 pub(crate) async fn enable_rpdo(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	pdo: u16,
@@ -37,7 +37,7 @@ pub(crate) async fn enable_rpdo(
 
 /// Enable or disable an RPDO.
 pub(crate) async fn enable_tpdo(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	pdo: u16,
@@ -58,7 +58,7 @@ pub(crate) async fn enable_tpdo(
 
 /// Set the full configuration of an RPDO.
 pub(crate) async fn configure_rpdo(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	pdo: u16,
@@ -102,7 +102,7 @@ pub(crate) async fn configure_tpdo(
 
 /// Read the communication parameters of an RPDO.
 pub(crate) async fn write_rpdo_communication_parameters(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	pdo: u16,
@@ -185,7 +185,7 @@ pub(crate) async fn write_tpdo_communication_parameters(
 
 /// Configure the mapping of a PDO object (RPDO or TPDO).
 pub(crate) async fn configure_pdo_mapping(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	object_index: u16,

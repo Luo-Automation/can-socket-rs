@@ -244,7 +244,7 @@ impl CanOpenSocket {
 
 	/// Configure an RPDO of a remote node.
 	pub async fn configure_rpdo(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
