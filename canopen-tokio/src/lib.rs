@@ -90,7 +90,7 @@ pub async fn listener(interface: &str, tx: mpsc::Sender<CanFrame>) -> Result<(),
 /// Returns [`None`] if the deadline expires before a frame arrives.
 /// Returns `Some(Err(...))` if the underlying CAN socket gives an error.
 pub async fn recv_frame_deadline(
-    mut rx: mpsc::Receiver<CanFrame>,
+    rx: &mut mpsc::Receiver<CanFrame>,
     deadline: Instant,
 ) -> Option<Option<can_socket::CanFrame>> {
     if Instant::now() >= deadline {
