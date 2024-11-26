@@ -71,9 +71,18 @@ impl CanOpenSocket {
 		&mut self,
 		node_id: u8,
 		command: nmt::NmtCommand,
+	) -> Result<(), nmt::NmtError> {
+		nmt::send_nmt_command(self, node_id, command).await
+	}
+
+	/// Send an NMT command and wait for the device to go into the specified state.
+	pub async fn send_nmt_command_timeout(
+		&mut self,
+		node_id: u8,
+		command: nmt::NmtCommand,
 		timeout: Duration,
 	) -> Result<(), nmt::NmtError> {
-		nmt::send_nmt_command(self, node_id, command, timeout).await
+		nmt::send_nmt_command_timeout(self, node_id, command, timeout).await
 	}
 
 	/// Read an object dictionary value by performing an upload from a SDO server.

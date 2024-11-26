@@ -55,7 +55,7 @@ async fn do_main(options: Options) -> Result<(), ()> {
 		Command::ResetCommunication => NmtCommand::ResetCommunication,
 	};
 
-	socket.send_nmt_command(options.node_id, command, options.timeout).await
+	socket.send_nmt_command_timeout(options.node_id, command, options.timeout).await
 		.map_err(|e| eprintln!("{e}"))?;
 
 	eprintln!("OK");
