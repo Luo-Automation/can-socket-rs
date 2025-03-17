@@ -81,7 +81,7 @@ async fn do_main(options: Options) -> Result<(), ()> {
 	let sdo = SdoAddress::standard();
 
 	// Reset the motor controller.
-	socket.send_nmt_command(node_id, NmtCommand::ResetCommunication, timeout).await
+	socket.send_nmt_command_timeout(node_id, NmtCommand::ResetCommunication, timeout).await
 		.map_err(|e| log::error!("Failed to reset communication of node {node_id}: {e}"))?;
 
 	// Configure TPDO 0.
@@ -137,7 +137,7 @@ async fn do_main(options: Options) -> Result<(), ()> {
 		.map_err(|e| log::error!("Failed to configure RPDO 0 of node {node_id}: {e}"))?;
 
 	// Start the motor controller.
-	socket.send_nmt_command(node_id, NmtCommand::Start, timeout).await
+	socket.send_nmt_command_timeout(node_id, NmtCommand::Start, timeout).await
 		.map_err(|e| log::error!("Failed to start node {node_id}: {e}"))?;
 
 	// Set maximum motor current.
