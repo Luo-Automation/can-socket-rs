@@ -1,10 +1,11 @@
-use std::{os::raw::{c_int, c_void}, mem::MaybeUninit, ffi::CString};
 use filedesc::FileDesc;
+use std::ffi::{c_int, c_void, CString};
+use std::mem::MaybeUninit;
 
-use crate::CanId;
+use crate::{CanData, CanId, ExtendedId, StandardId};
 
 #[repr(C)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 #[allow(non_camel_case_types)]
 struct can_frame {
 	pub can_id: u32,
@@ -15,72 +16,60 @@ struct can_frame {
 	pub data: [u8; 8],
 }
 
-#[derive(Debug)]
-pub struct Socket {
+pub(crate) struct Socket {
 	fd: FileDesc,
 }
 
 #[derive(Copy, Clone)]
-pub struct CanFrame {
+pub(crate) struct CanFrame {
 	inner: can_frame
 }
 
 #[repr(transparent)]
-#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct CanInterface {
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub(crate) struct CanInterface {
 	index: u32,
 }
 
-impl CanFrame {
-	pub fn new(id: impl Into<CanId>, data: &[u8], data_length_code: Option<u8>) -> std::io::Result<Self> {
-		let id = id.into();
+#[repr(transparent)]
+#[derive(Copy, Clone)]
+pub struct CanFilter {
+	filter: libc::can_filter,
+}
 
-		if data.len() > 8 {
-			return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "maximum CAN data length is 8 bytes"));
-		}
-		if let Some(data_length_code) = data_length_code {
-			if data.len() != 8 {
-				return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "data_length_code can only be set if data length is 8"));
-			}
-			if !(9..=15).contains(&data_length_code) {
-				return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "data_length_code must be in the range 9 to 15 (inclusive)"));
-			}
-		}
+impl CanFrame {
+	pub fn new(id: impl Into<CanId>, data: &crate::CanData) -> Self {
+		let id = id.into();
 
 		let mut inner: can_frame = unsafe { std::mem::zeroed() };
 		inner.can_id = match id {
 			CanId::Extended(x) => x.as_u32() | libc::CAN_EFF_FLAG,
-			CanId::Base(x) => x.as_u16().into(),
+			CanId::Standard(x) => x.as_u16().into(),
 		};
 		inner.can_dlc = data.len() as u8;
-		inner.len8_dlc = data_length_code.unwrap_or(0);
 		inner.data[..data.len()].copy_from_slice(data);
-		Ok(Self { inner })
+		Self { inner }
 	}
 
-	/// Create a new RTR (request-to-read) frame.
-	pub fn new_rtr(id: impl Into<CanId>, data_len: u8) -> std::io::Result<Self> {
+	pub fn new_rtr(id: impl Into<CanId>) -> Self {
 		let id = id.into();
-		if data_len > 8 {
-			return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "maximum CAN data length is 8 bytes"));
-		}
 
 		let mut inner: can_frame = unsafe { std::mem::zeroed() };
 		inner.can_id = match id {
 			CanId::Extended(x) => x.as_u32() | libc::CAN_EFF_FLAG,
-			CanId::Base(x) => x.as_u16().into(),
+			CanId::Standard(x) => x.as_u16().into(),
 		};
 		inner.can_id |= libc::CAN_RTR_FLAG;
-		inner.can_dlc = data_len;
+		inner.can_dlc = 0;
 		inner.len8_dlc = 0;
-		Ok(Self { inner })
+		Self { inner }
 	}
 
 	pub fn id(&self) -> CanId {
 		// Unwrap should be fine: the kernel should never give us an invalid CAN ID,
 		// and the Rust constructor doesn't allow it.
 		if self.inner.can_id & libc::CAN_EFF_FLAG == 0 {
-			CanId::new_base((self.inner.can_id & libc::CAN_SFF_MASK) as u16).unwrap()
+			CanId::new_standard((self.inner.can_id & libc::CAN_SFF_MASK) as u16).unwrap()
 		} else {
 			CanId::new_extended(self.inner.can_id & libc::CAN_EFF_MASK).unwrap()
 		}
@@ -90,15 +79,38 @@ impl CanFrame {
 		self.inner.can_id & libc::CAN_RTR_FLAG != 0
 	}
 
-	pub fn data(&self) -> &[u8] {
-		&self.inner.data[..self.inner.can_dlc as usize]
+	pub fn data(&self) -> Option<CanData> {
+		if self.is_rtr() {
+			None
+		} else {
+			Some(CanData {
+				data: self.inner.data,
+				len: self.inner.can_dlc,
+			})
+		}
 	}
 
-	pub fn data_length_code(&self) -> Option<u8> {
-		if self.inner.len8_dlc > 0 {
-			Some(self.inner.len8_dlc)
+	pub fn set_data_length_code(&mut self, dlc: u8) -> Result<(), ()> {
+		if dlc > 15 {
+			return Err(());
+		}
+
+		self.inner.can_dlc = dlc.clamp(0, 8);
+		if dlc > 8 {
+			self.inner.len8_dlc = dlc;
 		} else {
-			None
+			self.inner.len8_dlc = 0;
+		}
+
+		self.inner.data[self.inner.can_dlc as usize..].fill(0);
+		Ok(())
+	}
+
+	pub fn data_length_code(&self) -> u8 {
+		if self.inner.can_dlc == 8 && self.inner.len8_dlc > 8 {
+			self.inner.len8_dlc
+		} else {
+			self.inner.can_dlc
 		}
 	}
 
@@ -202,6 +214,21 @@ impl Socket {
 		}
 	}
 
+	pub fn local_addr(&self) -> std::io::Result<CanInterface> {
+		unsafe {
+			let mut addr: libc::sockaddr_can = std::mem::zeroed();
+			let mut addr_len: libc::socklen_t = std::mem::size_of_val(&addr) as _;
+			let _addr_len = check_int(libc::getsockname(
+				self.fd.as_raw_fd(),
+				&mut addr as *mut libc::sockaddr_can as *mut libc::sockaddr,
+				&mut addr_len,
+			));
+			Ok(CanInterface {
+				index: addr.can_ifindex as u32,
+			})
+		}
+	}
+
 	pub fn send(&self, frame: &CanFrame) -> std::io::Result<()> {
 		unsafe {
 			let written = check_isize(libc::send(
@@ -262,6 +289,177 @@ impl Socket {
 			Ok((frame.assume_init(), CanInterface { index: addr.can_ifindex as u32 }))
 		}
 	}
+
+	pub fn set_filters(&self, filters: &[crate::CanFilter]) -> std::io::Result<()> {
+		unsafe {
+			set_socket_option_slice(
+				&self.fd,
+				libc::SOL_CAN_RAW,
+				libc::CAN_RAW_FILTER,
+				filters,
+			)?;
+			Ok(())
+		}
+	}
+
+	pub fn get_loopback(&self) -> std::io::Result<bool> {
+		let enabled: c_int = unsafe {
+			get_socket_option(
+				&self.fd,
+				libc::SOL_CAN_RAW,
+				libc::CAN_RAW_LOOPBACK,
+			)?
+		};
+		Ok(enabled != 0)
+	}
+
+	pub fn set_loopback(&self, enable: bool) -> std::io::Result<()> {
+		unsafe {
+			set_socket_option(
+				&self.fd,
+				libc::SOL_CAN_RAW,
+				libc::CAN_RAW_LOOPBACK,
+				&c_int::from(enable),
+			)?;
+		}
+		Ok(())
+	}
+
+	pub fn get_receive_own_messages(&self) -> std::io::Result<bool> {
+		let enabled: c_int = unsafe {
+			get_socket_option(
+				&self.fd,
+				libc::SOL_CAN_RAW,
+				libc::CAN_RAW_RECV_OWN_MSGS,
+			)?
+		};
+		Ok(enabled != 0)
+	}
+
+	pub fn set_receive_own_messages(&self, enable: bool) -> std::io::Result<()> {
+		unsafe {
+			set_socket_option(
+				&self.fd,
+				libc::SOL_CAN_RAW,
+				libc::CAN_RAW_RECV_OWN_MSGS,
+				&c_int::from(enable),
+			)
+		}
+	}
+}
+
+impl CanFilter {
+	pub const fn new_standard(id: StandardId) -> Self {
+		Self {
+			filter: libc::can_filter {
+				can_id: id.as_u16() as u32,
+				can_mask: 0,
+			},
+		}
+	}
+
+	pub const fn new_extended(id: ExtendedId) -> Self {
+		Self {
+			filter: libc::can_filter {
+				can_id: id.as_u32(),
+				can_mask: 0,
+			},
+		}
+	}
+
+	#[must_use = "returns a new filter, does not modify the existing filter"]
+	pub const fn match_id_value(mut self) -> Self {
+		self.filter.can_mask |= libc::CAN_EFF_MASK;
+		self
+	}
+
+	pub const fn id(self) -> u32 {
+		self.filter.can_id & libc::CAN_EFF_MASK
+	}
+
+	pub const fn id_mask(self) -> u32 {
+		self.filter.can_mask & libc::CAN_EFF_MASK
+	}
+
+	pub const fn matches_rtr_frames(self) -> bool {
+		let rtr_unmasked = self.filter.can_mask & libc::CAN_RTR_FLAG != 0;
+		let is_rtr = self.filter.can_id & libc::CAN_RTR_FLAG != 0;
+		!rtr_unmasked || is_rtr
+	}
+
+	pub const fn matches_data_frames(self) -> bool {
+		let rtr_unmasked = self.filter.can_mask & libc::CAN_RTR_FLAG != 0;
+		let is_rtr = self.filter.can_id & libc::CAN_RTR_FLAG != 0;
+		!rtr_unmasked || !is_rtr
+	}
+
+	pub const fn matches_standard_frames(self) -> bool {
+		let frame_type_unmasked = self.filter.can_mask & libc::CAN_EFF_FLAG != 0;
+		let is_extended = self.filter.can_id & libc::CAN_EFF_FLAG != 0;
+		!frame_type_unmasked || !is_extended
+	}
+
+	pub const fn matches_extended_frames(self) -> bool {
+		let frame_type_unmasked = self.filter.can_mask & libc::CAN_EFF_FLAG != 0;
+		let is_extended = self.filter.can_id & libc::CAN_EFF_FLAG != 0;
+		!frame_type_unmasked || is_extended
+	}
+
+	#[must_use = "returns a new filter, does not modify the existing filter"]
+	pub const fn match_id_mask(mut self, mask: u32) -> Self {
+		self.filter.can_mask |= mask & libc::CAN_EFF_MASK;
+		self
+	}
+
+	#[must_use = "returns a new filter, does not modify the existing filter"]
+	pub const fn match_frame_format(mut self) -> Self {
+		self.filter.can_mask |= libc::CAN_EFF_FLAG;
+		self
+	}
+
+	#[must_use = "returns a new filter, does not modify the existing filter"]
+	pub const fn match_exact_id(mut self) -> Self {
+		self.filter.can_mask |= libc::CAN_EFF_MASK | libc::CAN_EFF_FLAG;
+		self
+	}
+
+	#[must_use = "returns a new filter, does not modify the existing filter"]
+	pub const fn match_rtr_only(mut self) -> Self {
+		self.filter.can_id |= libc::CAN_RTR_FLAG;
+		self.filter.can_mask |= libc::CAN_RTR_FLAG;
+		self
+	}
+
+	#[must_use = "returns a new filter, does not modify the existing filter"]
+	pub const fn match_data_only(mut self) -> Self {
+		self.filter.can_id &= !libc::CAN_RTR_FLAG;
+		self.filter.can_mask |= libc::CAN_RTR_FLAG;
+		self
+	}
+
+	#[must_use = "returns a new filter, does not modify the existing filter"]
+	pub const fn inverted(mut self, inverted: bool) -> Self {
+		if inverted {
+			self.filter.can_id |= libc::CAN_INV_FILTER;
+		} else {
+			self.filter.can_id &= !libc::CAN_INV_FILTER;
+		}
+		self
+	}
+
+	pub const fn is_inverted(self) -> bool {
+		self.filter.can_id & libc::CAN_INV_FILTER != 0
+	}
+
+	pub const fn test(self, frame: &CanFrame) -> bool {
+		let id = self.filter.can_id & !libc::CAN_INV_FILTER;
+		let frame_matches = frame.inner.can_id & self.filter.can_mask == id & self.filter.can_mask;
+		if self.is_inverted() {
+			frame_matches
+		} else {
+			!frame_matches
+		}
+	}
 }
 
 fn check_int(return_value: c_int) -> std::io::Result<c_int> {
@@ -278,6 +476,30 @@ fn check_isize(return_value: isize) -> std::io::Result<isize> {
 	} else {
 		Ok(return_value)
 	}
+}
+
+unsafe fn set_socket_option<T: Copy>(socket: &FileDesc, level: c_int, option: c_int, value: &T) -> std::io::Result<()> {
+	let len = std::mem::size_of_val(value).try_into().map_err(|_| std::io::ErrorKind::InvalidInput)?;
+	let value: *const T = value;
+	check_int(libc::setsockopt(socket.as_raw_fd(), level, option, value.cast(), len))?;
+	Ok(())
+}
+
+unsafe fn set_socket_option_slice<T: Copy>(socket: &FileDesc, level: c_int, option: c_int, value: &[T]) -> std::io::Result<()> {
+	let len = std::mem::size_of_val(value).try_into().map_err(|_| std::io::ErrorKind::InvalidInput)?;
+	let value = value.as_ptr();
+	check_int(libc::setsockopt(socket.as_raw_fd(), level, option, value.cast(), len))?;
+	Ok(())
+}
+
+unsafe fn get_socket_option<T: Copy + Default>(socket: &FileDesc, level: c_int, option: c_int) -> std::io::Result<T> {
+	let mut value = T::default();
+	let mut len = std::mem::size_of::<T>().try_into().unwrap();
+	{
+		let value: *mut T = &mut value;
+		check_int(libc::getsockopt(socket.as_raw_fd(), level, option, value.cast(), &mut len))?;
+	}
+	Ok(value)
 }
 
 impl std::os::fd::AsFd for Socket {
