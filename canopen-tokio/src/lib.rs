@@ -49,7 +49,7 @@ impl CanOpenSocket {
 	/// Returns [`None`] if the deadline expires before a frame arrives.
 	/// Returns `Some(Err(...))` if the underlying CAN socket gives an error.
 	pub async fn recv_frame_deadline(
-		&mut self,
+		&self,
 		deadline: Instant,
 	) -> Option<std::io::Result<can_socket::CanFrame>> {
 		if Instant::now() >= deadline {
@@ -60,7 +60,7 @@ impl CanOpenSocket {
 
 	/// Send a raw CAN frame.
 	pub async fn send_frame(
-		&mut self,
+		&self,
 		frame: &CanFrame,
 	) -> std::io::Result<()> {
 		self.socket.send(frame).await
@@ -68,7 +68,7 @@ impl CanOpenSocket {
 
 	/// Send an NMT command and wait for the device to go into the specified state.
 	pub async fn send_nmt_command(
-		&mut self,
+		&self,
 		node_id: u8,
 		command: nmt::NmtCommand,
 	) -> Result<(), nmt::NmtError> {
@@ -77,7 +77,7 @@ impl CanOpenSocket {
 
 	/// Send an NMT command and wait for the device to go into the specified state.
 	pub async fn send_nmt_command_timeout(
-		&mut self,
+		&self,
 		node_id: u8,
 		command: nmt::NmtCommand,
 		timeout: Duration,
@@ -90,7 +90,7 @@ impl CanOpenSocket {
 	/// Note that upload means "upload to server".
 	/// Most people outside of [CiA](https://can-cia.org/) would call this a download.
 	pub async fn sdo_upload_raw(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		object: ObjectIndex,
@@ -106,7 +106,7 @@ impl CanOpenSocket {
 	/// Note that upload means "upload to server".
 	/// Most people outside of [CiA](https://can-cia.org/) would call this a download.
 	pub async fn sdo_upload<T: sdo::UploadObject>(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		object: ObjectIndex,
@@ -124,7 +124,7 @@ impl CanOpenSocket {
 	/// Note that download means "download to server".
 	/// Most people outside of [CiA](https://can-cia.org/) would call this an upload.
 	pub async fn sdo_download<T: sdo::DownloadObject>(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		object: ObjectIndex,
@@ -138,7 +138,7 @@ impl CanOpenSocket {
 
 	/// Get the full PDO configuration of an RPDO of a remote node.
 	pub async fn read_rpdo_configuration(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
@@ -150,7 +150,7 @@ impl CanOpenSocket {
 
 	/// Get the full configuration of a TPDO of a remote node.
 	pub async fn read_tpdo_configuration(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
@@ -162,7 +162,7 @@ impl CanOpenSocket {
 
 	/// Configure an RPDO of a remote node.
 	pub async fn configure_rpdo(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
@@ -175,7 +175,7 @@ impl CanOpenSocket {
 
 	/// Configure a TPDO of a remote node.
 	pub async fn configure_tpdo(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
@@ -188,7 +188,7 @@ impl CanOpenSocket {
 
 	/// Enable or disable an RPDO of a remote node.
 	pub async fn enable_rpdo(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
@@ -201,7 +201,7 @@ impl CanOpenSocket {
 
 	/// Enable or disable a TPDO of a remote node.
 	pub async fn enable_tpdo(
-		&mut self,
+		&self,
 		node_id: u8,
 		sdo: sdo::SdoAddress,
 		pdo: u16,
@@ -214,7 +214,7 @@ impl CanOpenSocket {
 
 	/// Send a SYNC command to the CAN network.
 	pub async fn send_sync(
-		&mut self,
+		&self,
 		counter: Option<NonZeroU8>,
 	) -> Result<(), std::io::Error> {
 		sync::send_sync(self, counter).await
@@ -225,7 +225,7 @@ impl CanOpenSocket {
 	/// Messages already in the read queue are not returned.
 	/// If a message does not match the filter, it is added to the read queue.
 	async fn recv_new_filtered<F>(
-		&mut self,
+		&self,
 		predicate: F,
 		timeout: Duration,
 	) -> std::io::Result<Option<CanFrame>>
@@ -257,7 +257,7 @@ impl CanOpenSocket {
 	///
 	/// Messages already in the read queue are not returned.
 	/// If a message does not match the filter, it is added to the read queue.
-	async fn recv_new_by_can_id(&mut self, can_id: StandardId, timeout: Duration) -> std::io::Result<Option<CanFrame>> {
+	async fn recv_new_by_can_id(&self, can_id: StandardId, timeout: Duration) -> std::io::Result<Option<CanFrame>> {
 		self.recv_new_filtered(|frame| !frame.is_rtr() && frame.id().to_standard().is_ok_and(|x| x == can_id), timeout).await
 	}
 }
