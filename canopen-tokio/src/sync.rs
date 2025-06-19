@@ -8,7 +8,7 @@ const SYNC_DEFAULT_COB_ID: u8 = 0x80;
 
 /// Send a SYNC command to the CAN network.
 pub(crate) async fn send_sync(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	counter: Option<NonZeroU8>,
 ) -> Result<(), std::io::Error> {
 	log::debug!("Sending SYNC");

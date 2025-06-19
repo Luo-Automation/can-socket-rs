@@ -22,7 +22,7 @@ pub trait DownloadObject {
 
 /// Perform an SDO download (write) to the server.
 pub(crate) async fn sdo_download(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	address: SdoAddress,
 	object: ObjectIndex,
@@ -53,7 +53,7 @@ pub(crate) async fn sdo_download(
 
 /// Perform an expedited SDO download (write) to the server.
 async fn sdo_download_expedited(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	address: SdoAddress,
 	object: ObjectIndex,
@@ -81,7 +81,7 @@ async fn sdo_download_expedited(
 
 /// Perform an segmented SDO download (write) to the server.
 async fn sdo_download_segmented(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	address: SdoAddress,
 	object: ObjectIndex,

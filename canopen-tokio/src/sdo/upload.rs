@@ -40,7 +40,7 @@ pub trait UploadBuffer {
 
 /// Perform a SDO upload from the server.
 pub(crate) async fn sdo_upload<Buffer: UploadBuffer>(
-	bus: &mut CanOpenSocket,
+	bus: &CanOpenSocket,
 	node_id: u8,
 	sdo: SdoAddress,
 	object: ObjectIndex,
