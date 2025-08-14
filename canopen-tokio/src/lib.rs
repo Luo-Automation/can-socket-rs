@@ -251,7 +251,12 @@ impl CanOpenSocket {
 			.transpose()
 	}
 
-	/// Receive a new message from the CAN bus that that matches the given function code and node ID.
+	/// Receive a new message from the CAN bus.
+	pub async fn recv(&self) -> std::io::Result<CanFrame> {
+		self.socket.recv().await
+	}
+
+	/// Receive a new message from the CAN bus that matches the given function code and node ID.
 	///
 	/// RTR (request-to-read) messages are filtered out (not returned).
 	///
