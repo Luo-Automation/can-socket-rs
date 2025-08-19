@@ -45,7 +45,7 @@ async fn main() {
 async fn do_main(options: Options) -> Result<(), ()> {
 	let socket = CanSocket::bind(&options.interface)
 		.map_err(|e| eprintln!("Failed to create CAN socket for interface {}: {e}", options.interface))?;
-	let mut socket = CanOpenSocket::new(socket);
+	let socket = CanOpenSocket::new(socket);
 
 	let command = match options.command {
 		Command::Start => NmtCommand::Start,
